@@ -1,14 +1,27 @@
 library(tidyverse)
 source("simulation.R")
 
-simulation_results <- read_rds("results/simulation_results.rds")
-
-true_ates <- simulate(5e6, G = 20, seed = 5) %>%
-  arrange(group) %>%
-  group_by(group, group_effect) %>%
-  nest() %>%
-  mutate(ate = map_dbl(data, \(data) mean(data$Y1 - data$Y0))) %>%
-  select(-data)
+summary_bayes_tmle_hierarchical <- function(fit) {
+  freq <- fit$group_index %>% select(g, fit) %>%
+    mutate(freq_psi  = map_dbl(fit, \(fit) fit$estimates$ATE$psi),
+           freq_low  = map_dbl(fit, \(fit) fit$estimates$ATE$CI[1]), 
+           freq_high = map_dbl(fit, \(fit) fit$estimates$ATE$CI[2])) %>%
+    select(-fit)
+  
+  bayes_hierarchical <- fit$bayes_hierarchical$draws("psi") %>%
+    tidybayes::spread_draws(psi[g]) %>%
+    tidybayes::median_qi() %>%
+    left_join(fit$group_index %>% select(g, n, value))
+  
+  bayes_nonhierarchical <- fit$bayes_nonhierarchical$draws("psi") %>%
+    tidybayes::spread_draws(psi[g]) %>%
+    tidybayes::median_qi() %>%
+    left_join(fit$group_index %>% select(g, n, value))
+  
+  left_join(bayes_hierarchical, freq, by = "g") %>%
+    left_join(bayes_nonhierarchical, by = "g", suffix = c(".hierarchical", ".nonhierarchical")) %>%
+    mutate(nuisance_method = fit$nuisance_method)
+}
 
 metrics <- function(fit, naive_ates, true_ates) {
   summary_bayes_tmle_hierarchical(fit) %>%
@@ -23,6 +36,15 @@ metrics <- function(fit, naive_ates, true_ates) {
               bayes_nonhierarchical_coverage = mean(bayes_nonhierarchical_covered),
               bayes_hierarchical_coverage = mean(bayes_hierarchical_covered), freq_coverage = mean(freq_covered))
 }
+
+simulation_results <- read_rds("results/simulation_results.rds")
+
+true_ates <- simulate(5e6, G = 20, seed = 5) %>%
+  arrange(group) %>%
+  group_by(group, group_effect) %>%
+  nest() %>%
+  mutate(ate = map_dbl(data, \(data) mean(data$Y1 - data$Y0))) %>%
+  select(-data)
 
 results <- simulation_results %>%
   mutate(metrics = map2(res, naive_ate, metrics)) %>%
