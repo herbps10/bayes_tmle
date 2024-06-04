@@ -24,7 +24,7 @@ bayes_tmle_hierarchical <- function(Y, A, W, group, nuisance_method = "combined"
   group_index <- group_index %>% mutate(
     fit   = map2(start, end, function(start, end) {
       if(nuisance_method == "combined") {
-        fit <- tmle(Y[start:end], A[start:end], W[start:end,], Q = overall_fit$Qinit$Q[start:end, ], g1W = overall_fit$g$g1W[start:end], family = "binomial")
+        fit <- tmle(Y[start:end], A[start:end], W[start:end,], Q = overall_fit$Qinit$Q[start:end, ], Q.SL.library = Q.SL.library, g.SL.library = g.SL.library, g1W = overall_fit$g$g1W[start:end], family = "binomial")
       }
       else {
         fit <- tmle(Y[start:end], A[start:end], W[start:end,], Q.SL.library = Q.SL.library, g.SL.library = g.SL.library, family = "binomial")
@@ -83,4 +83,51 @@ bayes_tmle_hierarchical <- function(Y, A, W, group, nuisance_method = "combined"
     bayes_nonhierarchical = stan_fit_nonhierarchical,
     overall_fit = overall_fit
   )
+}
+
+
+summary_bayes_tmle_hierarchical <- function(fit) {
+  freq <- fit$group_index %>% select(g, fit) %>%
+    mutate(freq_psi  = map_dbl(fit, \(fit) fit$estimates$ATE$psi),
+           freq_low  = map_dbl(fit, \(fit) fit$estimates$ATE$CI[1]), 
+           freq_high = map_dbl(fit, \(fit) fit$estimates$ATE$CI[2])) %>%
+    select(-fit)
+  
+  bayes_hierarchical <- fit$bayes_hierarchical$draws("psi") %>%
+    tidybayes::spread_draws(psi[g]) %>%
+    tidybayes::median_qi() %>%
+    left_join(fit$group_index %>% select(g, n, value))
+  
+  bayes_nonhierarchical <- fit$bayes_nonhierarchical$draws("psi") %>%
+    tidybayes::spread_draws(psi[g]) %>%
+    tidybayes::median_qi() %>%
+    left_join(fit$group_index %>% select(g, n, value))
+  
+  left_join(bayes_hierarchical, freq, by = "g") %>%
+    left_join(bayes_nonhierarchical, by = "g", suffix = c(".hierarchical", ".nonhierarchical")) %>%
+    mutate(nuisance_method = fit$nuisance_method)
+}
+
+bayes_tmle_hierarchical_metrics <- function(fit, naive_ates, true_ates) {
+  summary_bayes_tmle_hierarchical(fit) %>%
+    left_join(true_ates,  by = c(g = "group")) %>%
+    left_join(naive_ates, by = c(g = "group")) %>%
+    mutate(
+      naive_error                    = ate - naive_ate,
+      freq_error                     = ate - freq_psi, 
+      bayes_hierarchical_error       = ate - psi.hierarchical, 
+      bayes_nonhierarchical_error    = ate - psi.nonhierarchical,
+      freq_covered                   = freq_low <= ate & freq_high >= ate,
+      bayes_hierarchical_covered     = .lower.hierarchical <= ate & .upper.hierarchical >= ate, 
+      bayes_nonhierarchical_covered  = .lower.nonhierarchical <= ate & .upper.nonhierarchical >= ate
+    ) %>%
+    summarize(
+      naive_mae                      = mean(abs(naive_error)),
+      freq_mae                       = mean(abs(freq_error)), 
+      bayes_hierarchical_mae         = mean(abs(bayes_hierarchical_error)), 
+      bayes_nonhierarchical_mae      = mean(abs(bayes_nonhierarchical_error)),
+      freq_coverage                  = mean(freq_covered),
+      bayes_hierarchical_coverage    = mean(bayes_hierarchical_covered), 
+      bayes_nonhierarchical_coverage = mean(bayes_nonhierarchical_covered)
+    )
 }

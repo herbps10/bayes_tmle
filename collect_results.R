@@ -1,5 +1,5 @@
 library(tidyverse)
-files <- Sys.glob("/gpfs/scratch/susmah01/bayes_tmle/cache/*/*.rds")
+files <- Sys.glob("/gpfs/scratch/susmah01/bayes_tmle/cache/*/5_*.rds")
 
 results <- map_df(files, read_rds) %>% dplyr::bind_rows()
 

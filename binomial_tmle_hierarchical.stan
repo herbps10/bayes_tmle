@@ -25,7 +25,7 @@ transformed data {
 }
 parameters {
   vector[G] epsilon;
-  array[hierarchical] real mu;
+  array[hierarchical] real<lower=-1,upper=1> mu;
   array[hierarchical] real<lower=0> sigma;
 }
 transformed parameters {
@@ -60,17 +60,20 @@ transformed parameters {
   
 }
 model {
-  
-  
+  // Jacobian adjustment
+  for(g in 1:G) {
+    target += log(dpsi[g]);
+  }
+    
   // Hierarchical prior
   if(hierarchical == 1) {
-      // Jacobian adjustment
-    for(g in 1:G) {
-      target += log(dpsi[g]);
-    }
-    
     psi ~ normal(mu[1], sigma[1]);
-    sigma[1] ~ inv_gamma(0.001, 0.001);
+    mu[1] ~ uniform(-1, 1);
+    //sigma[1] ~ inv_gamma(0.001, 0.001);
+    //sigma[1] ~ uniform(0, 10);
+  }
+  else {
+    psi ~ uniform(-1, 1);
   }
   
   // Likelihood
