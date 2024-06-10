@@ -24,10 +24,10 @@ bayes_tmle_hierarchical <- function(Y, A, W, group, nuisance_method = "combined"
   group_index <- group_index %>% mutate(
     fit   = map2(start, end, function(start, end) {
       if(nuisance_method == "combined") {
-        fit <- tmle(Y[start:end], A[start:end], W[start:end,], Q = overall_fit$Qinit$Q[start:end, ], Q.SL.library = Q.SL.library, g.SL.library = g.SL.library, g1W = overall_fit$g$g1W[start:end], family = "binomial")
+        fit <- tmle(Y[start:end], A[start:end], W[start:end,], Q = overall_fit$Qinit$Q[start:end, ], Q.SL.library = Q.SL.library, g.SL.library = g.SL.library, g1W = overall_fit$g$g1W[start:end], family = "binomial", V.g = 10, V.Q = 10)
       }
       else {
-        fit <- tmle(Y[start:end], A[start:end], W[start:end,], Q.SL.library = Q.SL.library, g.SL.library = g.SL.library, family = "binomial")
+        fit <- tmle(Y[start:end], A[start:end], W[start:end,], Q.SL.library = Q.SL.library, g.SL.library = g.SL.library, family = "binomial", V.g = 10, V.Q = 10)
       }
     }),
     Qbar  = pmap(list(fit, start, end), \(fit, start, end) ifelse(A[start:end] == 0, fit$Qinit$Q[, 1], fit$Qinit$Q[, 2])),
@@ -122,6 +122,10 @@ bayes_tmle_hierarchical_metrics <- function(fit, naive_ates, true_ates) {
       bayes_nonhierarchical_covered  = .lower.nonhierarchical <= ate & .upper.nonhierarchical >= ate
     ) %>%
     summarize(
+      naive_me                       = mean(naive_error),
+      freq_me                        = mean(freq_error), 
+      bayes_hierarchical_me          = mean(bayes_hierarchical_error), 
+      bayes_nonhierarchical_me       = mean(bayes_nonhierarchical_error),
       naive_mae                      = mean(abs(naive_error)),
       freq_mae                       = mean(abs(freq_error)), 
       bayes_hierarchical_mae         = mean(abs(bayes_hierarchical_error)), 
