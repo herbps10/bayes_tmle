@@ -1,2 +1,2 @@
-# bayes_tmle
-Bayesian TMLE
+# Bayesian TMLE
+Bayesian Targeted Maximum Likelihood Estimation
